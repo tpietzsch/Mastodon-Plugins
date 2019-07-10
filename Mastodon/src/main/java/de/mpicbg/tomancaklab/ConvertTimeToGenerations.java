@@ -48,7 +48,7 @@ public class ConvertTimeToGenerations extends AbstractContextual implements Mast
     private static Map<String, String> menuTexts = new HashMap<>();
 
     static {
-        menuTexts.put(PluginID, "Save Nodes and Tracks");
+        menuTexts.put(PluginID, "Convert Time To Generations");
     }
 
     @Override
