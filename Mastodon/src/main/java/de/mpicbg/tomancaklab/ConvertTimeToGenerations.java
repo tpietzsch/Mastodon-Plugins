@@ -1,5 +1,9 @@
 package de.mpicbg.tomancaklab;
 
+import org.mastodon.adapter.FocusModelAdapter;
+import org.mastodon.adapter.HighlightModelAdapter;
+import org.mastodon.adapter.RefBimap;
+import org.mastodon.adapter.SelectionModelAdapter;
 import org.mastodon.app.ui.ViewMenuBuilder;
 import org.mastodon.model.*;
 import org.mastodon.plugin.MastodonPlugin;
@@ -9,14 +13,19 @@ import org.mastodon.project.MamutProjectIO;
 import org.mastodon.revised.mamut.KeyConfigContexts;
 import org.mastodon.revised.mamut.MamutAppModel;
 import org.mastodon.revised.mamut.Mastodon;
+import org.mastodon.revised.model.mamut.Link;
 import org.mastodon.revised.model.mamut.Model;
 import org.mastodon.revised.model.mamut.ModelGraph;
 import org.mastodon.revised.model.mamut.Spot;
+import org.mastodon.revised.trackscheme.TrackSchemeEdge;
 import org.mastodon.revised.trackscheme.TrackSchemeGraph;
+import org.mastodon.revised.trackscheme.TrackSchemeVertex;
 import org.mastodon.revised.trackscheme.display.TrackSchemeNavigationActions;
 import org.mastodon.revised.trackscheme.display.TrackSchemeOptions;
 import org.mastodon.revised.trackscheme.display.TrackSchemePanel;
+import org.mastodon.revised.trackscheme.display.TrackSchemeZoom;
 import org.mastodon.revised.trackscheme.wrap.DefaultModelGraphProperties;
+import org.mastodon.revised.ui.FocusActions;
 import org.mastodon.revised.ui.keymap.Keymap;
 import org.mastodon.spatial.SpatioTemporalIndex;
 import org.scijava.AbstractContextual;
@@ -100,15 +109,41 @@ public class ConvertTimeToGenerations extends AbstractContextual implements Mast
 
     private void showModelGraph(ModelGraph modelGraph) {
 
-        TrackSchemeGraph trackSchemeGraph = new TrackSchemeGraph(modelGraph, modelGraph.getGraphIdBimap(), new DefaultModelGraphProperties());
-        DefaultHighlightModel defaultHighlightModel = new DefaultHighlightModel(modelGraph.getGraphIdBimap());
-        DefaultFocusModel defaultFocusModel = new DefaultFocusModel(modelGraph.getGraphIdBimap());
-        DefaultTimepointModel defaultTimepointModel = new DefaultTimepointModel();
-        DefaultSelectionModel defaultSelectionModel = new DefaultSelectionModel(modelGraph, modelGraph.getGraphIdBimap());
-        DefaultNavigationHandler defaultNavigationHandler = new DefaultNavigationHandler();
+        TrackSchemeGraph<Spot, Link> trackSchemeGraph = new TrackSchemeGraph<>(
+                modelGraph,
+                modelGraph.getGraphIdBimap(),
+                new DefaultModelGraphProperties<>(),
+                modelGraph.getLock());
+
+        final RefBimap<Spot, TrackSchemeVertex> vertexMap = trackSchemeGraph.getVertexMap();
+        final RefBimap<Link, TrackSchemeEdge> edgeMap = trackSchemeGraph.getEdgeMap();
+
+        final HighlightModel<TrackSchemeVertex, TrackSchemeEdge> highlightModel =
+                new HighlightModelAdapter<>(
+                        new DefaultHighlightModel<>(modelGraph.getGraphIdBimap()),
+                        vertexMap, edgeMap);
+        final FocusModel<TrackSchemeVertex, TrackSchemeEdge> focusModel =
+                new FocusModelAdapter<>(
+                        new DefaultFocusModel<>(modelGraph.getGraphIdBimap()),
+                        vertexMap, edgeMap);
+        final DefaultTimepointModel timepointModel = new DefaultTimepointModel();
+        final SelectionModel<TrackSchemeVertex, TrackSchemeEdge> selectionModel =
+                new SelectionModelAdapter<>(
+                        new DefaultSelectionModel<>(modelGraph, modelGraph.getGraphIdBimap()),
+                        vertexMap, edgeMap);
+        final NavigationHandler<TrackSchemeVertex, TrackSchemeEdge> navigationHandler = new DefaultNavigationHandler<>();
+        final AutoNavigateFocusModel<TrackSchemeVertex, TrackSchemeEdge> navigateFocusModel = new AutoNavigateFocusModel<>(focusModel, navigationHandler);
+
         TrackSchemeOptions trackSchemeOptions = new TrackSchemeOptions();
 
-        TrackSchemePanel trackSchemePanel = new TrackSchemePanel(trackSchemeGraph, defaultHighlightModel, defaultFocusModel, defaultTimepointModel, defaultSelectionModel, defaultNavigationHandler, trackSchemeOptions);
+        TrackSchemePanel trackSchemePanel = new TrackSchemePanel(
+                trackSchemeGraph,
+                highlightModel,
+                navigateFocusModel,
+                timepointModel,
+                selectionModel,
+                navigationHandler,
+                trackSchemeOptions);
         trackSchemePanel.setVisible(true);
         JFrame jFrame = new JFrame();
         jFrame.add(trackSchemePanel);
@@ -143,6 +178,9 @@ public class ConvertTimeToGenerations extends AbstractContextual implements Mast
         trackSchemePanel.getNavigationActions().install(viewActions, TrackSchemeNavigationActions.NavigatorEtiquette.FINDER_LIKE);
         trackSchemePanel.getNavigationBehaviours().install(viewBehaviours);
         trackSchemePanel.getTransformEventHandler().install(viewBehaviours);
+
+        FocusActions.install(viewActions, trackSchemeGraph, trackSchemeGraph.getLock(), navigateFocusModel, selectionModel);
+        TrackSchemeZoom.install(viewBehaviours, trackSchemePanel);
 
         jFrame.setVisible(true);
     }
